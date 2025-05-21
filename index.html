@@ -1,30 +1,92 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <title>Test Google Map</title>
+    <title>Road Logger</title>
     <style>
       html, body {
         height: 100%;
         margin: 0;
         padding: 0;
+        font-family: Arial, sans-serif;
       }
       #map {
         height: 500px;
         width: 100%;
         background: #e0e0e0;
       }
+      #log {
+        padding: 10px;
+      }
     </style>
   </head>
   <body>
-    <h2>Google Map Test</h2>
+    <h2 style="margin-left:10px;">Click Two Points to Log a Road</h2>
     <div id="map"></div>
+    <div id="log"></div>
 
     <script>
+      let map, markers = [], points = [];
+
       function initMap() {
-        const map = new google.maps.Map(document.getElementById("map"), {
+        map = new google.maps.Map(document.getElementById("map"), {
           center: { lat: 0.0236, lng: 37.9062 },
           zoom: 6,
         });
+
+        map.addListener("click", async (e) => {
+          if (points.length === 2) {
+            points = [];
+            markers.forEach(m => m.setMap(null));
+            markers = [];
+          }
+
+          const latLng = e.latLng.toJSON();
+          points.push(latLng);
+
+          const marker = new google.maps.Marker({
+            position: latLng,
+            map: map
+          });
+          markers.push(marker);
+
+          if (points.length === 2) {
+            const roadInfo = await getRoadDetails(points[0], points[1]);
+            const log = document.getElementById("log");
+            log.innerHTML = `
+              <b>Start:</b> (${points[0].lat.toFixed(5)}, ${points[0].lng.toFixed(5)})<br>
+              <b>End:</b> (${points[1].lat.toFixed(5)}, ${points[1].lng.toFixed(5)})<br>
+              <b>Road Name:</b> ${roadInfo.roadName}<br>
+              <b>Type:</b> ${roadInfo.roadType}<br>
+              <b>Address:</b> ${roadInfo.address}<br>
+            `;
+          }
+        });
+      }
+
+      async function getRoadDetails(start, end) {
+        const geocodeUrl = (lat, lng) =>
+          `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=AIzaSyDYwaH0sUZJGZx2DUuo97fNgcrxtUjkvQM`;
+
+        const res = await fetch(geocodeUrl(start.lat, start.lng));
+        const data = await res.json();
+
+        let address = data.results[0]?.formatted_address || "N/A";
+        let roadName = "N/A", roadType = "N/A";
+
+        const roadComp = data.results[0]?.address_components || [];
+        roadComp.forEach(c => {
+          if (c.types.includes("route")) {
+            roadName = c.long_name;
+            roadType = "Road";
+          } else if (c.types.includes("intersection")) {
+            roadType = "Intersection";
+          } else if (c.types.includes("locality") && roadName === "N/A") {
+            roadName = c.long_name;
+            roadType = "Locality";
+          }
+        });
+
+        return { roadName, roadType, address };
       }
     </script>
 
